@@ -508,6 +508,7 @@ body {
     <button class="btn" onclick="openModal('event')">＋ 予定</button>
     <button class="btn" onclick="openModal('task')">＋ タスク</button>
     <button class="btn" onclick="openModal('timetable')">＋ 時間割</button>
+    <button class="btn" onclick="openTermSettings()">⚙ 学期設定</button>
   </div>
 </div>
 
@@ -581,16 +582,35 @@ function getCancelsForTT(ttId) {
 }
 
 // ============ LESSON COUNTING ============
-const TERM_DATES = [
-  { name: '1学期', start: new Date(2026,3,7), end: new Date(2026,6,18) },
-  { name: '2学期', start: new Date(2026,8,1), end: new Date(2026,11,22) },
-  { name: '3学期', start: new Date(2027,0,8), end: new Date(2027,2,20) },
+const DEFAULT_TERMS = [
+  { name: '1学期', start: '2026-04-07', end: '2026-07-18' },
+  { name: '2学期', start: '2026-09-01', end: '2026-12-22' },
+  { name: '3学期', start: '2027-01-08', end: '2027-03-20' },
 ];
+
+let termDates = [];
+
+function loadTermDates() {
+  try {
+    const raw = localStorage.getItem('weekview_terms');
+    if (raw) {
+      termDates = JSON.parse(raw);
+    } else {
+      termDates = JSON.parse(JSON.stringify(DEFAULT_TERMS));
+    }
+  } catch(e) {
+    termDates = JSON.parse(JSON.stringify(DEFAULT_TERMS));
+  }
+}
+
+function saveTermDates() {
+  try { localStorage.setItem('weekview_terms', JSON.stringify(termDates)); } catch(e) {}
+}
 
 function getTermForDate(dateStr) {
   const d = new Date(dateStr);
-  for (const t of TERM_DATES) {
-    if (d >= t.start && d <= t.end) return t;
+  for (const t of termDates) {
+    if (d >= new Date(t.start) && d <= new Date(t.end)) return t;
   }
   return null;
 }
@@ -610,13 +630,14 @@ function getLessonNumber(ttItem, dateStr) {
 
   // For each slot, generate all weekly dates within the term, skipping cancellations
   const allLessons = [];
+  const termEnd = new Date(term.end);
   for (const slot of sameTitle) {
     const jsDow = slot.dow;
     let cur = new Date(term.start);
     while (cur.getDay() !== jsDow) {
       cur.setDate(cur.getDate() + 1);
     }
-    while (cur <= term.end) {
+    while (cur <= termEnd) {
       const d = ds(cur);
       // Skip cancelled dates
       if (!isCancelled(slot.id, d)) {
@@ -964,8 +985,92 @@ function deleteItem(id) {
   closeModal();
 }
 
+// ============ TERM SETTINGS MODAL ============
+function openTermSettings() {
+  let html = `<h3>⚙ 学期設定</h3>
+    <p style="font-size:11px;color:var(--text3);margin-bottom:14px;">各学期の開始日・終了日を設定します。コマ数カウントはこの期間に基づいて計算されます。</p>`;
+
+  termDates.forEach((t, i) => {
+    html += `<div style="margin-bottom:14px;padding:12px;background:var(--bg3);border-radius:8px;">
+      <div style="font-size:12px;font-weight:600;color:var(--blue);margin-bottom:8px;">${t.name}</div>
+      <div class="fr">
+        <div class="fg"><label>開始日</label><input class="fi" type="date" id="termStart${i}" value="${t.start}"></div>
+        <div class="fg"><label>終了日</label><input class="fi" type="date" id="termEnd${i}" value="${t.end}"></div>
+      </div>
+    </div>`;
+  });
+
+  html += `<div style="border-top:1px solid var(--border-lt);margin-top:8px;padding-top:14px;">
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;">学期を追加・削除することもできます。</div>
+    <div class="fr" style="align-items:flex-end;">
+      <div class="fg"><label>学期名</label><input class="fi" id="newTermName" placeholder="例: 補習期間"></div>
+      <div class="fg"><label>開始日</label><input class="fi" type="date" id="newTermStart"></div>
+      <div class="fg"><label>終了日</label><input class="fi" type="date" id="newTermEnd"></div>
+      <button class="btn" onclick="addTerm()" style="margin-bottom:12px;flex-shrink:0;">追加</button>
+    </div>
+  </div>`;
+
+  if (termDates.length > 3) {
+    html += `<div style="margin-top:8px;">`;
+    termDates.slice(3).forEach((t, i) => {
+      html += `<div style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text2);padding:4px 0;">
+        <span>${t.name}（${t.start} ～ ${t.end}）</span>
+        <button class="btn btn-del" style="font-size:10px;padding:2px 6px;" onclick="removeTerm(${i + 3})">削除</button>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  html += `<div class="modal-foot">
+    <button class="btn" onclick="resetTerms()">初期値に戻す</button>
+    <div style="flex:1"></div>
+    <button class="btn" onclick="closeModal()">キャンセル</button>
+    <button class="btn btn-blue" onclick="saveTermSettings()">保存</button>
+  </div>`;
+
+  document.getElementById('modalInner').innerHTML = html;
+  document.getElementById('modalBg').classList.add('open');
+}
+
+function saveTermSettings() {
+  termDates.forEach((t, i) => {
+    const startEl = document.getElementById(`termStart${i}`);
+    const endEl = document.getElementById(`termEnd${i}`);
+    if (startEl && endEl) {
+      t.start = startEl.value;
+      t.end = endEl.value;
+    }
+  });
+  saveTermDates();
+  render();
+  closeModal();
+}
+
+function addTerm() {
+  const name = document.getElementById('newTermName').value.trim();
+  const start = document.getElementById('newTermStart').value;
+  const end = document.getElementById('newTermEnd').value;
+  if (!name || !start || !end) return;
+  termDates.push({ name, start, end });
+  saveTermDates();
+  openTermSettings(); // refresh modal
+}
+
+function removeTerm(index) {
+  termDates.splice(index, 1);
+  saveTermDates();
+  openTermSettings(); // refresh modal
+}
+
+function resetTerms() {
+  termDates = JSON.parse(JSON.stringify(DEFAULT_TERMS));
+  saveTermDates();
+  openTermSettings(); // refresh modal
+}
+
 // ============ INIT ============
 loadData();
+loadTermDates();
 
 // Add sample data if empty
 if (items.length === 0) {
