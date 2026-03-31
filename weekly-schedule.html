@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>週間スケジュール</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #1a1a1f;
+  --bg2: #222228;
+  --bg3: #2a2a32;
+  --bg-hover: #32323c;
+  --card: #25252d;
+  --text: #e8e6e3;
+  --text2: #9b9a97;
+  --text3: #6b6a68;
+  --border: #3a3a42;
+  --border-lt: #2e2e36;
+  --blue: #5b9bd5;
+  --green: #6bc07f;
+  --orange: #e8a955;
+  --red: #e06c75;
+  --purple: #b07cd8;
+  --teal: #56b6c2;
+  --pink: #d97ba0;
+  --yellow: #e5c07b;
+  --radius: 8px;
+  --transition: 0.2s cubic-bezier(0.4,0,0.2,1);
+  --hour-h: 60px;
+  --header-h: 60px;
+}
+
+body {
+  font-family: 'Noto Sans JP', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Top bar */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border-lt);
+  flex-shrink: 0;
+}
+
+.topbar h1 {
+  font-size: 15px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.topbar-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 12px;
+}
+
+.topbar-nav button {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  color: var(--text2);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+}
+
+.topbar-nav button:hover { background: var(--bg-hover); color: var(--text); }
+
+.week-label {
+  font-size: 15px;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', 'Noto Sans JP', monospace;
+  min-width: 200px;
+}
+
+.btn {
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  color: var(--text2);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all var(--transition);
+  font-family: inherit;
+}
+
+.btn:hover { background: var(--bg-hover); color: var(--text); }
+
+.btn-blue { background: var(--blue); color: #fff; border-color: var(--blue); }
+.btn-blue:hover { background: #4a8ac4; }
+
+.topbar-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+
+/* Legend */
+.legend {
+  display: flex;
+  gap: 14px;
+  padding: 6px 20px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border-lt);
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text3);
+  align-items: center;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+/* Grid */
+.schedule-wrap {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.schedule-grid {
+  display: grid;
+  grid-template-columns: 52px repeat(7, 1fr);
+  position: relative;
+  min-height: calc(var(--hour-h) * 16 + var(--header-h));
+}
+
+/* Day headers */
+.day-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 4px;
+  text-align: center;
+  height: var(--header-h);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.day-header.corner {
+  border-right: 1px solid var(--border-lt);
+}
+
+.day-header .dow {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.day-header .date-num {
+  font-size: 16px;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
+  margin-top: 2px;
+  color: var(--text2);
+}
+
+.day-header.today .date-num {
+  background: var(--blue);
+  color: #fff;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 2px auto 0;
+}
+
+.day-header.sun .dow, .day-header.sun .date-num { color: var(--red); }
+.day-header.sat .dow, .day-header.sat .date-num { color: var(--blue); }
+.day-header.today.sun .date-num, .day-header.today.sat .date-num { color: #fff; }
+
+/* Time column */
+.time-col {
+  grid-column: 1;
+  border-right: 1px solid var(--border-lt);
+  position: relative;
+}
+
+.time-label {
+  position: absolute;
+  right: 8px;
+  font-size: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text3);
+  transform: translateY(-50%);
+}
+
+/* Day columns */
+.day-col {
+  position: relative;
+  border-right: 1px solid var(--border-lt);
+}
+
+.day-col:last-child { border-right: none; }
+
+.hour-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--border-lt);
+}
+
+.half-hour-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--border-lt);
+  opacity: 0.4;
+}
+
+/* Now line */
+.now-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--red);
+  z-index: 4;
+}
+
+.now-line::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  background: var(--red);
+  border-radius: 50%;
+}
+
+/* Event blocks */
+.ev-block {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 10px;
+  line-height: 1.35;
+  overflow: hidden;
+  cursor: pointer;
+  z-index: 2;
+  transition: opacity var(--transition);
+  border-left: 3px solid;
+}
+
+.ev-block:hover { opacity: 0.85; }
+
+.ev-block .ev-title {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ev-block .ev-time {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  opacity: 0.75;
+}
+
+.ev-block.type-timetable {
+  background: rgba(91,155,213,0.18);
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.ev-block.type-event {
+  background: rgba(107,192,127,0.18);
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.ev-block.type-task {
+  background: rgba(232,169,85,0.18);
+  border-color: var(--orange);
+  color: var(--orange);
+  min-height: 20px;
+}
+
+.ev-block.type-meeting {
+  background: rgba(176,124,216,0.18);
+  border-color: var(--purple);
+  color: var(--purple);
+}
+
+.ev-block.type-club {
+  background: rgba(224,108,117,0.18);
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.ev-block.type-other {
+  background: rgba(86,182,194,0.18);
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
+.ev-block.cancelled {
+  opacity: 0.4;
+  background: rgba(224,108,117,0.10);
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.ev-block.cancelled .ev-title {
+  text-decoration: line-through;
+}
+
+.ev-block .ev-cancel-tag {
+  font-size: 8px;
+  font-weight: 600;
+  background: rgba(224,108,117,0.2);
+  padding: 0 4px;
+  border-radius: 3px;
+  display: inline-block;
+  margin-left: 4px;
+}
+
+/* Cancel list in modal */
+.cancel-list-wrap {
+  max-height: 150px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+}
+
+.cancel-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  font-size: 11px;
+  border-radius: 4px;
+  color: var(--text2);
+}
+
+.cancel-row:hover { background: var(--bg-hover); }
+
+.cancel-row .c-date {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--red);
+  font-size: 10px;
+  min-width: 80px;
+}
+
+.cancel-row .c-reason {
+  flex: 1;
+  color: var(--text3);
+  font-size: 10px;
+}
+
+.cancel-row .c-del {
+  background: none;
+  border: none;
+  color: var(--text3);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 2px;
+}
+
+.cancel-row .c-del:hover { color: var(--red); }
+
+.cancel-add-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.cancel-add-row input {
+  flex: 1;
+  padding: 5px 8px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 11px;
+  font-family: inherit;
+}
+
+.cancel-add-row input:focus { outline: none; border-color: var(--blue); }
+
+/* Modal */
+.modal-bg {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(3px);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+
+.modal-bg.open { opacity: 1; pointer-events: all; }
+
+.modal {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 22px;
+  width: 420px;
+  max-width: 92vw;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+
+.modal h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+
+.fg { margin-bottom: 12px; }
+
+.fg label {
+  display: block;
+  font-size: 10px;
+  color: var(--text3);
+  font-weight: 600;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.fi, .fs {
+  width: 100%;
+  padding: 7px 10px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+}
+
+.fi:focus, .fs:focus { outline: none; border-color: var(--blue); }
+
+.fr { display: flex; gap: 10px; }
+.fr .fg { flex: 1; }
+
+.modal-foot {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.btn-del { color: var(--red); border-color: var(--red); background: transparent; }
+.btn-del:hover { background: rgba(224,108,117,0.1); }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>📅 週間スケジュール</h1>
+  <div class="topbar-nav">
+    <button onclick="changeWeek(-1)">◂</button>
+    <span class="week-label" id="weekLabel"></span>
+    <button onclick="changeWeek(1)">▸</button>
+    <button class="btn" onclick="goThisWeek()" style="margin-left:4px;">今週</button>
+  </div>
+  <div class="topbar-actions">
+    <button class="btn" onclick="openModal('event')">＋ 予定</button>
+    <button class="btn" onclick="openModal('task')">＋ タスク</button>
+    <button class="btn" onclick="openModal('timetable')">＋ 時間割</button>
+  </div>
+</div>
+
+<div class="legend">
+  <span style="margin-right:4px;">種別：</span>
+  <span class="legend-item"><span class="legend-dot" style="background:var(--blue)"></span> 時間割</span>
+  <span class="legend-item"><span class="legend-dot" style="background:var(--green)"></span> 予定</span>
+  <span class="legend-item"><span class="legend-dot" style="background:var(--orange)"></span> タスク</span>
+  <span class="legend-item"><span class="legend-dot" style="background:var(--purple)"></span> 会議</span>
+  <span class="legend-item"><span class="legend-dot" style="background:var(--red)"></span> 部活動</span>
+  <span class="legend-item"><span class="legend-dot" style="background:var(--teal)"></span> その他</span>
+</div>
+
+<div class="schedule-wrap" id="scheduleWrap">
+  <div class="schedule-grid" id="grid"></div>
+</div>
+
+<div class="modal-bg" id="modalBg" onclick="if(event.target===this)closeModal()">
+  <div class="modal" id="modalInner"></div>
+</div>
+
+<script>
+// ============ CONFIG ============
+const START_HOUR = 7;
+const END_HOUR = 21;
+const HOUR_H = 60;
+const TODAY = new Date(2026, 2, 18);
+
+// ============ STATE ============
+let weekStart = getWeekStart(TODAY);
+let items = [];
+let cancellations = []; // { ttId, date, reason }
+let nextId = 1;
+
+function getWeekStart(d) {
+  const r = new Date(d);
+  r.setDate(r.getDate() - r.getDay());
+  r.setHours(0,0,0,0);
+  return r;
+}
+
+function pad(n) { return String(n).padStart(2, '0'); }
+function ds(d) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+
+// Load from localStorage
+function loadData() {
+  try {
+    const raw = localStorage.getItem('weekview_items');
+    if (raw) {
+      items = JSON.parse(raw);
+      nextId = items.reduce((m, i) => Math.max(m, i.id + 1), 1);
+    }
+    const rawC = localStorage.getItem('weekview_cancels');
+    if (rawC) cancellations = JSON.parse(rawC);
+  } catch(e) {}
+}
+
+function saveData() {
+  try {
+    localStorage.setItem('weekview_items', JSON.stringify(items));
+    localStorage.setItem('weekview_cancels', JSON.stringify(cancellations));
+  } catch(e) {}
+}
+
+function isCancelled(ttId, dateStr) {
+  return cancellations.some(c => c.ttId === ttId && c.date === dateStr);
+}
+
+function getCancelsForTT(ttId) {
+  return cancellations.filter(c => c.ttId === ttId);
+}
+
+// ============ LESSON COUNTING ============
+const TERM_DATES = [
+  { name: '1学期', start: new Date(2026,3,7), end: new Date(2026,6,18) },
+  { name: '2学期', start: new Date(2026,8,1), end: new Date(2026,11,22) },
+  { name: '3学期', start: new Date(2027,0,8), end: new Date(2027,2,20) },
+];
+
+function getTermForDate(dateStr) {
+  const d = new Date(dateStr);
+  for (const t of TERM_DATES) {
+    if (d >= t.start && d <= t.end) return t;
+  }
+  return null;
+}
+
+// Get unified lesson number for a timetable item on a specific date.
+// All timetable items with the same title are counted as one sequence.
+// Cancelled dates are skipped. Returns -1 if this date is cancelled.
+function getLessonNumber(ttItem, dateStr) {
+  const term = getTermForDate(dateStr);
+  if (!term) return null;
+
+  // Check if this specific slot+date is cancelled
+  if (isCancelled(ttItem.id, dateStr)) return -1;
+
+  // Find all timetable items with the same title (= same class+subject)
+  const sameTitle = items.filter(it => it.type === 'timetable' && it.title === ttItem.title);
+
+  // For each slot, generate all weekly dates within the term, skipping cancellations
+  const allLessons = [];
+  for (const slot of sameTitle) {
+    const jsDow = slot.dow;
+    let cur = new Date(term.start);
+    while (cur.getDay() !== jsDow) {
+      cur.setDate(cur.getDate() + 1);
+    }
+    while (cur <= term.end) {
+      const d = ds(cur);
+      // Skip cancelled dates
+      if (!isCancelled(slot.id, d)) {
+        allLessons.push({ date: d, dow: slot.dow, id: slot.id });
+      }
+      cur.setDate(cur.getDate() + 7);
+    }
+  }
+
+  // Sort chronologically, then by dow for same date
+  allLessons.sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    return a.dow - b.dow;
+  });
+
+  // Find the position of the target date + slot
+  for (let i = 0; i < allLessons.length; i++) {
+    if (allLessons[i].date === dateStr && allLessons[i].id === ttItem.id) {
+      return i + 1;
+    }
+  }
+
+  return null;
+}
+
+// ============ RENDER ============
+function render() {
+  const grid = document.getElementById('grid');
+  const dows = ['日','月','火','水','木','金','土'];
+  const todayStr = ds(TODAY);
+
+  // Week label
+  const we = new Date(weekStart);
+  we.setDate(we.getDate() + 6);
+  const wm1 = weekStart.getMonth()+1, wm2 = we.getMonth()+1;
+  let label = `${weekStart.getFullYear()}年 ${wm1}/${weekStart.getDate()} – `;
+  if (wm1 !== wm2) label += `${wm2}/`;
+  label += we.getDate();
+  document.getElementById('weekLabel').textContent = label;
+
+  const totalH = (END_HOUR - START_HOUR) * HOUR_H;
+
+  // Corner
+  let html = '<div class="day-header corner"></div>';
+
+  // Day headers
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(weekStart);
+    d.setDate(d.getDate() + i);
+    const isToday = ds(d) === todayStr;
+    let cls = 'day-header';
+    if (isToday) cls += ' today';
+    if (i === 0) cls += ' sun';
+    if (i === 6) cls += ' sat';
+    html += `<div class="${cls}">
+      <div class="dow">${dows[i]}</div>
+      <div class="date-num">${d.getDate()}</div>
+    </div>`;
+  }
+
+  // Time column
+  html += `<div class="time-col" style="height:${totalH}px;">`;
+  for (let h = START_HOUR; h <= END_HOUR; h++) {
+    const top = (h - START_HOUR) * HOUR_H;
+    html += `<span class="time-label" style="top:${top}px;">${pad(h)}:00</span>`;
+  }
+  html += '</div>';
+
+  // Day columns
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(weekStart);
+    d.setDate(d.getDate() + i);
+    const dayStr = ds(d);
+
+    html += `<div class="day-col" style="height:${totalH}px;">`;
+
+    // Hour lines
+    for (let h = START_HOUR; h <= END_HOUR; h++) {
+      const top = (h - START_HOUR) * HOUR_H;
+      html += `<div class="hour-line" style="top:${top}px;"></div>`;
+      if (h < END_HOUR) html += `<div class="half-hour-line" style="top:${top + HOUR_H/2}px;"></div>`;
+    }
+
+    // Now line
+    if (dayStr === todayStr) {
+      const nowH = 10, nowM = 30; // simulated current time
+      const nowTop = (nowH - START_HOUR) * HOUR_H + (nowM / 60) * HOUR_H;
+      if (nowTop >= 0 && nowTop <= totalH) {
+        html += `<div class="now-line" style="top:${nowTop}px;"></div>`;
+      }
+    }
+
+    // Events for this day
+    const dayItems = items.filter(it => {
+      if (it.type === 'timetable') {
+        // Recurring: match day of week
+        return it.dow === i;
+      }
+      return it.date === dayStr;
+    });
+
+    dayItems.forEach(it => {
+      const sh = parseInt(it.startTime.split(':')[0]);
+      const sm = parseInt(it.startTime.split(':')[1]);
+      let eh, em;
+      if (it.endTime) {
+        eh = parseInt(it.endTime.split(':')[0]);
+        em = parseInt(it.endTime.split(':')[1]);
+      } else {
+        eh = sh;
+        em = sm + 25;
+        if (em >= 60) { eh++; em -= 60; }
+      }
+
+      const top = (sh - START_HOUR) * HOUR_H + (sm / 60) * HOUR_H;
+      const bot = (eh - START_HOUR) * HOUR_H + (em / 60) * HOUR_H;
+      const height = Math.max(20, bot - top);
+
+      const timeStr = it.endTime ? `${it.startTime}–${it.endTime}` : it.startTime;
+
+      // Lesson number for timetable items
+      let lessonTag = '';
+      let cancelledCls = '';
+      if (it.type === 'timetable') {
+        const num = getLessonNumber(it, dayStr);
+        if (num === -1) {
+          cancelledCls = ' cancelled';
+          lessonTag = ' <span class="ev-cancel-tag">休講</span>';
+        } else if (num) {
+          lessonTag = ` <span style="opacity:0.7;font-weight:400;">#${num}</span>`;
+        }
+      }
+
+      html += `<div class="ev-block type-${it.type}${cancelledCls}" style="top:${top}px;height:${height}px;" onclick="openEditModal(${it.id},'${dayStr}')">
+        <div class="ev-title">${it.title}${lessonTag}</div>
+        <div class="ev-time">${timeStr}</div>
+      </div>`;
+    });
+
+    html += '</div>';
+  }
+
+  grid.innerHTML = html;
+
+  // Scroll to 7:30
+  const wrap = document.getElementById('scheduleWrap');
+  wrap.scrollTop = HOUR_H * 0.5;
+}
+
+// ============ NAVIGATION ============
+function changeWeek(dir) {
+  weekStart = new Date(weekStart);
+  weekStart.setDate(weekStart.getDate() + dir * 7);
+  render();
+}
+
+function goThisWeek() {
+  weekStart = getWeekStart(TODAY);
+  render();
+}
+
+// ============ MODAL ============
+function closeModal() {
+  document.getElementById('modalBg').classList.remove('open');
+}
+
+function openModal(type) {
+  let html = '';
+  const typeLabels = { event: '📅 予定を追加', task: '✅ タスクを追加', timetable: '🕐 時間割を追加' };
+
+  html = `<h3>${typeLabels[type]}</h3>`;
+
+  html += `<div class="fg"><label>タイトル</label><input class="fi" id="mTitle" placeholder="${type === 'timetable' ? '例: 1-E 英語' : type === 'task' ? '例: 成績入力' : '例: 職員会議'}"></div>`;
+
+  if (type === 'timetable') {
+    html += `<div class="fg"><label>曜日</label><select class="fs" id="mDow">
+      <option value="0">日</option><option value="1" selected>月</option><option value="2">火</option>
+      <option value="3">水</option><option value="4">木</option><option value="5">金</option><option value="6">土</option>
+    </select></div>`;
+  } else {
+    html += `<div class="fg"><label>日付</label><input class="fi" id="mDate" type="date" value="${ds(TODAY)}"></div>`;
+  }
+
+  if (type === 'event' || type === 'timetable') {
+    html += `<div class="fr">
+      <div class="fg"><label>開始時刻</label><input class="fi" id="mStart" type="time" value="09:00"></div>
+      <div class="fg"><label>終了時刻</label><input class="fi" id="mEnd" type="time" value="10:00"></div>
+    </div>`;
+  } else {
+    html += `<div class="fg"><label>時刻</label><input class="fi" id="mStart" type="time" value="09:00"></div>`;
+  }
+
+  if (type === 'event') {
+    html += `<div class="fg"><label>種別</label><select class="fs" id="mSubtype">
+      <option value="event">予定</option><option value="meeting">会議</option>
+      <option value="club">部活動</option><option value="other">その他</option>
+    </select></div>`;
+  }
+
+  html += `<div class="modal-foot">
+    <button class="btn" onclick="closeModal()">キャンセル</button>
+    <button class="btn btn-blue" onclick="addItem('${type}')">追加</button>
+  </div>`;
+
+  document.getElementById('modalInner').innerHTML = html;
+  document.getElementById('modalBg').classList.add('open');
+}
+
+function addItem(type) {
+  const title = document.getElementById('mTitle').value.trim();
+  if (!title) return;
+
+  const item = {
+    id: nextId++,
+    title,
+    type: type === 'event' ? (document.getElementById('mSubtype')?.value || 'event') : type,
+    startTime: document.getElementById('mStart').value,
+    endTime: document.getElementById('mEnd')?.value || null,
+  };
+
+  if (type === 'timetable') {
+    item.dow = parseInt(document.getElementById('mDow').value);
+  } else {
+    item.date = document.getElementById('mDate').value;
+  }
+
+  items.push(item);
+  saveData();
+  render();
+  closeModal();
+}
+
+function openEditModal(id, clickedDate) {
+  const it = items.find(i => i.id === id);
+  if (!it) return;
+
+  let html = `<h3>✏️ 編集</h3>`;
+  html += `<div class="fg"><label>タイトル</label><input class="fi" id="eTitle" value="${it.title.replace(/"/g,'&quot;')}"></div>`;
+
+  if (it.type === 'timetable') {
+    html += `<div class="fg"><label>曜日</label><select class="fs" id="eDow">
+      ${['日','月','火','水','木','金','土'].map((d,i) => `<option value="${i}" ${i===it.dow?'selected':''}>${d}</option>`).join('')}
+    </select></div>`;
+  } else {
+    html += `<div class="fg"><label>日付</label><input class="fi" id="eDate" type="date" value="${it.date || ''}"></div>`;
+  }
+
+  html += `<div class="fr">
+    <div class="fg"><label>開始時刻</label><input class="fi" id="eStart" type="time" value="${it.startTime}"></div>
+    <div class="fg"><label>終了時刻</label><input class="fi" id="eEnd" type="time" value="${it.endTime || ''}"></div>
+  </div>`;
+
+  // Cancellation section for timetable items
+  if (it.type === 'timetable') {
+    const cancels = getCancelsForTT(it.id);
+    html += `<div style="border-top:1px solid var(--border-lt);margin-top:14px;padding-top:14px;">`;
+    html += `<label style="display:block;font-size:10px;color:var(--text3);font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.04em;">🚫 休講記録（${cancels.length}件）</label>`;
+
+    if (cancels.length > 0) {
+      html += '<div class="cancel-list-wrap">';
+      cancels.sort((a,b) => a.date.localeCompare(b.date));
+      cancels.forEach((c, idx) => {
+        html += `<div class="cancel-row">
+          <span class="c-date">${c.date}</span>
+          <span class="c-reason">${c.reason || '—'}</span>
+          <button class="c-del" onclick="removeCancel(${it.id},'${c.date}')" title="削除">✕</button>
+        </div>`;
+      });
+      html += '</div>';
+    } else {
+      html += '<div style="font-size:11px;color:var(--text3);padding:6px 0;">休講の記録はありません</div>';
+    }
+
+    // Quick cancel for the clicked date
+    const defaultDate = clickedDate || ds(TODAY);
+    html += `<div class="cancel-add-row">
+      <input type="date" id="cancelDate" value="${defaultDate}">
+      <input type="text" id="cancelReason" placeholder="理由（任意）">
+      <button class="btn" style="flex-shrink:0;" onclick="addCancel(${it.id})">＋ 休講追加</button>
+    </div>`;
+
+    html += '</div>';
+  }
+
+  html += `<div class="modal-foot">
+    <button class="btn btn-del" onclick="deleteItem(${id})">削除</button>
+    <div style="flex:1"></div>
+    <button class="btn" onclick="closeModal()">キャンセル</button>
+    <button class="btn btn-blue" onclick="saveItem(${id})">保存</button>
+  </div>`;
+
+  document.getElementById('modalInner').innerHTML = html;
+  document.getElementById('modalBg').classList.add('open');
+}
+
+function addCancel(ttId) {
+  const date = document.getElementById('cancelDate').value;
+  const reason = document.getElementById('cancelReason').value.trim();
+  if (!date) return;
+
+  if (isCancelled(ttId, date)) {
+    const inp = document.getElementById('cancelDate');
+    inp.style.borderColor = 'var(--red)';
+    setTimeout(() => inp.style.borderColor = '', 2000);
+    return;
+  }
+
+  cancellations.push({ ttId, date, reason });
+  saveData();
+
+  // Re-open modal to refresh
+  const it = items.find(i => i.id === ttId);
+  if (it) openEditModal(ttId, date);
+}
+
+function removeCancel(ttId, date) {
+  cancellations = cancellations.filter(c => !(c.ttId === ttId && c.date === date));
+  saveData();
+  openEditModal(ttId, date);
+}
+
+function saveItem(id) {
+  const it = items.find(i => i.id === id);
+  if (!it) return;
+  it.title = document.getElementById('eTitle').value.trim();
+  if (!it.title) return;
+  it.startTime = document.getElementById('eStart').value;
+  it.endTime = document.getElementById('eEnd').value || null;
+  if (it.type === 'timetable') {
+    it.dow = parseInt(document.getElementById('eDow').value);
+  } else {
+    it.date = document.getElementById('eDate').value;
+  }
+  saveData();
+  render();
+  closeModal();
+}
+
+function deleteItem(id) {
+  // Also remove associated cancellations
+  cancellations = cancellations.filter(c => c.ttId !== id);
+  items = items.filter(i => i.id !== id);
+  saveData();
+  render();
+  closeModal();
+}
+
+// ============ INIT ============
+loadData();
+
+// Add sample data if empty
+if (items.length === 0) {
+  items = [
+    { id: nextId++, title: '1-E 英語', type: 'timetable', dow: 2, startTime: '09:00', endTime: '09:50' },
+    { id: nextId++, title: '2-A 英語', type: 'timetable', dow: 2, startTime: '10:00', endTime: '10:50' },
+    { id: nextId++, title: '1-E 英語', type: 'timetable', dow: 6, startTime: '09:00', endTime: '09:50' },
+    { id: nextId++, title: '3-B 英語演習', type: 'timetable', dow: 4, startTime: '11:00', endTime: '11:50' },
+    { id: nextId++, title: '1-C 英語', type: 'timetable', dow: 1, startTime: '13:00', endTime: '13:50' },
+    { id: nextId++, title: '2-A 英語', type: 'timetable', dow: 5, startTime: '14:00', endTime: '14:50' },
+    { id: nextId++, title: '職員会議', type: 'meeting', date: '2026-04-09', startTime: '15:30', endTime: '17:00' },
+    { id: nextId++, title: '部活指導', type: 'club', date: '2026-04-09', startTime: '17:00', endTime: '18:30' },
+    { id: nextId++, title: '成績入力〆切', type: 'task', date: '2026-04-09', startTime: '16:45', endTime: null },
+    { id: nextId++, title: '探究発表リハーサル', type: 'event', date: '2026-04-10', startTime: '14:00', endTime: '16:00' },
+    { id: nextId++, title: '高体連会議', type: 'meeting', date: '2026-04-08', startTime: '10:00', endTime: '12:00' },
+  ];
+  cancellations = [
+    { ttId: 1, date: '2026-04-29', reason: '昭和の日' },
+    { ttId: 2, date: '2026-04-29', reason: '昭和の日' },
+    { ttId: 1, date: '2026-05-13', reason: '中間考査' },
+  ];
+  saveData();
+}
+
+render();
+</script>
+</body>
+</html>
