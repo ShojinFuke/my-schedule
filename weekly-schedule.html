@@ -509,6 +509,7 @@ body {
     <button class="btn" onclick="openModal('task')">＋ タスク</button>
     <button class="btn" onclick="openModal('timetable')">＋ 時間割</button>
     <button class="btn" onclick="openTermSettings()">⚙ 学期設定</button>
+    <button class="btn" onclick="openExportModal()">📤 Gcal書き出し</button>
   </div>
 </div>
 
@@ -1066,6 +1067,139 @@ function resetTerms() {
   termDates = JSON.parse(JSON.stringify(DEFAULT_TERMS));
   saveTermDates();
   openTermSettings(); // refresh modal
+}
+
+// ============ ICS EXPORT ============
+function openExportModal() {
+  // Summarize what will be exported
+  const ttItems = items.filter(i => i.type === 'timetable');
+  const cancelCount = cancellations.length;
+
+  let termSummary = termDates.map(t => `${t.name}: ${t.start} ～ ${t.end}`).join('<br>');
+
+  let ttSummary = '';
+  if (ttItems.length === 0) {
+    ttSummary = '<div style="color:var(--text3);font-size:12px;">時間割が登録されていません。</div>';
+  } else {
+    const dows = ['日','月','火','水','木','金','土'];
+    ttSummary = ttItems.map(it =>
+      `<span style="display:inline-block;background:var(--bg3);border-radius:4px;padding:2px 8px;margin:2px;font-size:11px;">${dows[it.dow]} ${it.startTime}–${it.endTime} ${it.title}</span>`
+    ).join('');
+  }
+
+  const html = `<h3>📤 Googleカレンダー用に書き出し</h3>
+    <p style="font-size:11px;color:var(--text3);margin-bottom:14px;">
+      時間割データを .ics ファイルとして書き出します。<br>
+      各学期の期間内で週ごとに展開し、休講日は除外されます。
+    </p>
+
+    <div style="margin-bottom:12px;">
+      <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">対象の学期</label>
+      <div style="font-size:11px;color:var(--text2);margin-top:4px;line-height:1.8;">${termSummary}</div>
+    </div>
+
+    <div style="margin-bottom:12px;">
+      <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">書き出す時間割（${ttItems.length}件）</label>
+      <div style="margin-top:6px;">${ttSummary}</div>
+    </div>
+
+    <div style="margin-bottom:12px;">
+      <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">除外される休講（${cancelCount}件）</label>
+      <div style="font-size:11px;color:var(--text2);margin-top:4px;">${cancelCount > 0 ? cancelCount + '件の休講日が除外されます' : '休講の登録はありません'}</div>
+    </div>
+
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal()">キャンセル</button>
+      <button class="btn btn-blue" onclick="exportICS()">📥 .ics をダウンロード</button>
+    </div>`;
+
+  document.getElementById('modalInner').innerHTML = html;
+  document.getElementById('modalBg').classList.add('open');
+}
+
+function exportICS() {
+  const ttItems = items.filter(i => i.type === 'timetable');
+  if (ttItems.length === 0) return;
+
+  let events = [];
+
+  // For each timetable item, expand to individual dates within each term
+  for (const tt of ttItems) {
+    for (const term of termDates) {
+      const termEnd = new Date(term.end);
+      const jsDow = tt.dow;
+
+      // Find first occurrence of this weekday in the term
+      let cur = new Date(term.start);
+      while (cur.getDay() !== jsDow) {
+        cur.setDate(cur.getDate() + 1);
+      }
+
+      while (cur <= termEnd) {
+        const dateStr = ds(cur);
+
+        // Skip cancelled dates
+        if (!isCancelled(tt.id, dateStr)) {
+          const y = cur.getFullYear();
+          const m = pad(cur.getMonth() + 1);
+          const d = pad(cur.getDate());
+          const sh = tt.startTime.replace(':', '');
+          const eh = (tt.endTime || tt.startTime).replace(':', '');
+
+          events.push({
+            dtstart: `${y}${m}${d}T${sh}00`,
+            dtend: `${y}${m}${d}T${eh}00`,
+            summary: tt.title,
+            description: `${term.name}`,
+            uid: `tt-${tt.id}-${dateStr}@weekly-schedule`
+          });
+        }
+
+        cur.setDate(cur.getDate() + 7);
+      }
+    }
+  }
+
+  // Build ICS content
+  let ics = 'BEGIN:VCALENDAR\r\n';
+  ics += 'VERSION:2.0\r\n';
+  ics += 'PRODID:-//WeeklySchedule//JP\r\n';
+  ics += 'CALSCALE:GREGORIAN\r\n';
+  ics += 'X-WR-CALNAME:時間割\r\n';
+  ics += 'X-WR-TIMEZONE:Asia/Tokyo\r\n';
+
+  // Timezone definition
+  ics += 'BEGIN:VTIMEZONE\r\n';
+  ics += 'TZID:Asia/Tokyo\r\n';
+  ics += 'BEGIN:STANDARD\r\n';
+  ics += 'DTSTART:19700101T000000\r\n';
+  ics += 'TZOFFSETFROM:+0900\r\n';
+  ics += 'TZOFFSETTO:+0900\r\n';
+  ics += 'END:STANDARD\r\n';
+  ics += 'END:VTIMEZONE\r\n';
+
+  for (const ev of events) {
+    ics += 'BEGIN:VEVENT\r\n';
+    ics += `DTSTART;TZID=Asia/Tokyo:${ev.dtstart}\r\n`;
+    ics += `DTEND;TZID=Asia/Tokyo:${ev.dtend}\r\n`;
+    ics += `SUMMARY:${ev.summary}\r\n`;
+    ics += `DESCRIPTION:${ev.description}\r\n`;
+    ics += `UID:${ev.uid}\r\n`;
+    ics += 'END:VEVENT\r\n';
+  }
+
+  ics += 'END:VCALENDAR\r\n';
+
+  // Download
+  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'timetable.ics';
+  a.click();
+  URL.revokeObjectURL(url);
+
+  closeModal();
 }
 
 // ============ INIT ============
