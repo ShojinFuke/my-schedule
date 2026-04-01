@@ -609,9 +609,9 @@ function saveTermDates() {
 }
 
 function getTermForDate(dateStr) {
-  const d = new Date(dateStr);
+  // Use string comparison to avoid timezone issues with new Date()
   for (const t of termDates) {
-    if (d >= new Date(t.start) && d <= new Date(t.end)) return t;
+    if (dateStr >= t.start && dateStr <= t.end) return t;
   }
   return null;
 }
@@ -631,14 +631,13 @@ function getLessonNumber(ttItem, dateStr) {
 
   // For each slot, generate all weekly dates within the term, skipping cancellations
   const allLessons = [];
-  const termEnd = new Date(term.end);
   for (const slot of sameTitle) {
     const jsDow = slot.dow;
-    let cur = new Date(term.start);
+    let cur = new Date(term.start + 'T00:00:00');
     while (cur.getDay() !== jsDow) {
       cur.setDate(cur.getDate() + 1);
     }
-    while (cur <= termEnd) {
+    while (ds(cur) <= term.end) {
       const d = ds(cur);
       // Skip cancelled dates
       if (!isCancelled(slot.id, d)) {
@@ -988,12 +987,29 @@ function deleteItem(id) {
 
 // ============ TERM SETTINGS MODAL ============
 function openTermSettings() {
+  // Check for overlaps
+  const overlaps = detectOverlaps();
+
   let html = `<h3>⚙ 学期設定</h3>
-    <p style="font-size:11px;color:var(--text3);margin-bottom:14px;">各学期の開始日・終了日を設定します。コマ数カウントはこの期間に基づいて計算されます。</p>`;
+    <p style="font-size:11px;color:var(--text3);margin-bottom:14px;">各学期の開始日・終了日を設定します。コマ数カウントはこの期間に基づいて計算されます。<br>⚠ 期間が重複しているとカウントが正しく動きません。</p>`;
+
+  if (overlaps.length > 0) {
+    html += `<div style="background:rgba(224,108,117,0.1);border:1px solid var(--red);border-radius:8px;padding:10px 12px;margin-bottom:14px;">
+      <div style="font-size:11px;font-weight:600;color:var(--red);margin-bottom:4px;">⚠ 期間の重複が検出されました</div>`;
+    overlaps.forEach(o => {
+      html += `<div style="font-size:10px;color:var(--red);">「${o.a}」と「${o.b}」の期間が重なっています</div>`;
+    });
+    html += `</div>`;
+  }
 
   termDates.forEach((t, i) => {
-    html += `<div style="margin-bottom:14px;padding:12px;background:var(--bg3);border-radius:8px;">
-      <div style="font-size:12px;font-weight:600;color:var(--blue);margin-bottom:8px;">${t.name}</div>
+    const hasOverlap = overlaps.some(o => o.ai === i || o.bi === i);
+    const borderStyle = hasOverlap ? 'border:1px solid var(--red);' : '';
+    html += `<div style="margin-bottom:14px;padding:12px;background:var(--bg3);border-radius:8px;${borderStyle}">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <input class="fi" id="termName${i}" value="${t.name.replace(/"/g,'&quot;')}" style="width:auto;flex:1;font-size:12px;font-weight:600;color:var(--blue);background:transparent;border:1px solid transparent;padding:2px 6px;" onfocus="this.style.borderColor='var(--border)'" onblur="this.style.borderColor='transparent'">
+        <button class="btn btn-del" style="font-size:10px;padding:2px 8px;margin-left:8px;" onclick="removeTerm(${i})">削除</button>
+      </div>
       <div class="fr">
         <div class="fg"><label>開始日</label><input class="fi" type="date" id="termStart${i}" value="${t.start}"></div>
         <div class="fg"><label>終了日</label><input class="fi" type="date" id="termEnd${i}" value="${t.end}"></div>
@@ -1002,25 +1018,14 @@ function openTermSettings() {
   });
 
   html += `<div style="border-top:1px solid var(--border-lt);margin-top:8px;padding-top:14px;">
-    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;">学期を追加・削除することもできます。</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;">学期を追加する：</div>
     <div class="fr" style="align-items:flex-end;">
-      <div class="fg"><label>学期名</label><input class="fi" id="newTermName" placeholder="例: 補習期間"></div>
+      <div class="fg"><label>学期名</label><input class="fi" id="newTermName" placeholder="例: 1学期中間後"></div>
       <div class="fg"><label>開始日</label><input class="fi" type="date" id="newTermStart"></div>
       <div class="fg"><label>終了日</label><input class="fi" type="date" id="newTermEnd"></div>
       <button class="btn" onclick="addTerm()" style="margin-bottom:12px;flex-shrink:0;">追加</button>
     </div>
   </div>`;
-
-  if (termDates.length > 3) {
-    html += `<div style="margin-top:8px;">`;
-    termDates.slice(3).forEach((t, i) => {
-      html += `<div style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text2);padding:4px 0;">
-        <span>${t.name}（${t.start} ～ ${t.end}）</span>
-        <button class="btn btn-del" style="font-size:10px;padding:2px 6px;" onclick="removeTerm(${i + 3})">削除</button>
-      </div>`;
-    });
-    html += `</div>`;
-  }
 
   html += `<div class="modal-foot">
     <button class="btn" onclick="resetTerms()">初期値に戻す</button>
@@ -1033,16 +1038,43 @@ function openTermSettings() {
   document.getElementById('modalBg').classList.add('open');
 }
 
+function detectOverlaps() {
+  const results = [];
+  for (let i = 0; i < termDates.length; i++) {
+    for (let j = i + 1; j < termDates.length; j++) {
+      const a = termDates[i];
+      const b = termDates[j];
+      // Overlap if a.start <= b.end AND b.start <= a.end
+      if (a.start <= b.end && b.start <= a.end) {
+        results.push({ a: a.name, b: b.name, ai: i, bi: j });
+      }
+    }
+  }
+  return results;
+}
+
 function saveTermSettings() {
   termDates.forEach((t, i) => {
+    const nameEl = document.getElementById(`termName${i}`);
     const startEl = document.getElementById(`termStart${i}`);
     const endEl = document.getElementById(`termEnd${i}`);
+    if (nameEl) t.name = nameEl.value.trim() || t.name;
     if (startEl && endEl) {
       t.start = startEl.value;
       t.end = endEl.value;
     }
   });
+
+  // Check overlaps and warn (but still save)
+  const overlaps = detectOverlaps();
   saveTermDates();
+
+  if (overlaps.length > 0) {
+    // Re-open to show warnings
+    openTermSettings();
+    return;
+  }
+
   render();
   closeModal();
 }
@@ -1126,16 +1158,15 @@ function exportICS() {
   // For each timetable item, expand to individual dates within each term
   for (const tt of ttItems) {
     for (const term of termDates) {
-      const termEnd = new Date(term.end);
       const jsDow = tt.dow;
 
       // Find first occurrence of this weekday in the term
-      let cur = new Date(term.start);
+      let cur = new Date(term.start + 'T00:00:00');
       while (cur.getDay() !== jsDow) {
         cur.setDate(cur.getDate() + 1);
       }
 
-      while (cur <= termEnd) {
+      while (ds(cur) <= term.end) {
         const dateStr = ds(cur);
 
         // Skip cancelled dates
